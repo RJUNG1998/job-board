@@ -275,7 +275,6 @@ const CANDIDATE_COMPANIES: Company[] = [
   // ── Travel ──
   { name: 'Vacasa',                 slug: 'vacasa' },
   { name: 'GetYourGuide',           slug: 'getyourguide' },
-  { name: 'Hopper',                 slug: 'hopper' },
   { name: 'Kasa Living',            slug: 'kasaliving' },
   { name: 'Mint House',             slug: 'minthouse' },
 
