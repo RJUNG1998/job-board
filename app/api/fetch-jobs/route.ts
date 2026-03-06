@@ -1,4 +1,4 @@
-import { supabase } from "@/app/lib/supabase"
+import { supabase } from "@/app/lib/supabase-browser"
 import { JobInsert } from "@/app/types/job"
 import { NextResponse } from "next/server"
 

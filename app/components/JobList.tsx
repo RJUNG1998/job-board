@@ -3,8 +3,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import JobCard from './JobCard'
 import { Job } from '../types/job'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../lib/supabase-browser'
 import NewJobsBadge from './NewJobBadge'
+import { RealtimePostgresInsertPayload } from '@supabase/supabase-js'
 
 const PAGE_SIZE = 20
 const NEW_THRESHOLD = 30 * 60 * 1000
@@ -126,7 +127,7 @@ export default function JobList({ onStatsUpdate }: JobListProps) {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'jobs' },
-        (payload) => {
+        (payload: RealtimePostgresInsertPayload<Job>) => {
           const newJob = payload.new as Job
           setPendingJobs(prev => [newJob, ...prev])
           
