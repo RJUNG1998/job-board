@@ -5,6 +5,7 @@ interface JobCardProps {
   now: number
   isNew: boolean
   isBrandNew: boolean
+  isDark: boolean
 }
 
 const SOURCE_COLORS: Record<string, string> = {
@@ -34,7 +35,7 @@ const formatSalary = (min: number | null, max: number | null) => {
   return `up to ${fmt(max!)}`
 }
 
-export default function JobCard({ job, now, isNew, isBrandNew }: JobCardProps) {
+export default function JobCard({ job, now, isNew, isBrandNew, isDark }: JobCardProps) {
   const salary = formatSalary(job.salary_min, job.salary_max)
   const color = SOURCE_COLORS[job.source] ?? '#94A3B8'
   const postedTime = job.posted_at ? timeAgo(job.posted_at, now) : timeAgo(job.fetched_at, now)
@@ -49,7 +50,9 @@ export default function JobCard({ job, now, isNew, isBrandNew }: JobCardProps) {
         transition-all duration-150 cursor-pointer
         ${isBrandNew
           ? 'bg-green-500/5 border-green-500/20 animate-slideIn'
-          : 'bg-white/[0.025] border-white/[0.06] hover:bg-white/[0.05] hover:border-white/10'
+          : isDark
+            ? 'bg-white/[0.025] border-white/[0.06] hover:bg-white/[0.05] hover:border-white/10'
+            : 'bg-black/[0.02] border-black/[0.06] hover:bg-black/[0.04] hover:border-black/10'
         }
       `}
     >
@@ -57,11 +60,25 @@ export default function JobCard({ job, now, isNew, isBrandNew }: JobCardProps) {
       <div className="flex items-center gap-4 min-w-0">
 
         {/* Company initial */}
-        <div
-          className="w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
-          style={{ background: `${color}22`, border: `1px solid ${color}33` }}
-        >
-          <span style={{ color }}>{job.company[0].toUpperCase()}</span>
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+          <img
+            src={`https://www.google.com/s2/favicons?domain=${job.company.toLowerCase().replace(/\s+/g, '')}.com&sz=64`}
+            alt={job.company}
+            className="w-7 h-7 object-contain"
+            onError={(e) => {
+              const target = e.currentTarget
+              target.style.display = 'none'
+              const fallback = target.nextElementSibling as HTMLElement
+              if (fallback) fallback.style.display = 'flex'
+            }}
+          />
+          {/* 폴백: 이미지 실패시 이니셜 */}
+          <div
+            className="w-9 h-9 rounded-lg items-center justify-center text-sm font-bold hidden"
+            style={{ background: `${color}22`, border: `1px solid ${color}33`, display: 'none' }}
+          >
+            <span style={{ color }}>{job.company[0].toUpperCase()}</span>
+          </div>
         </div>
 
         {/* Info */}
@@ -78,13 +95,13 @@ export default function JobCard({ job, now, isNew, isBrandNew }: JobCardProps) {
               </span>
             )}
           </div>
-          <div className="text-sm font-semibold text-white/90 truncate">
+          <div className={`text-sm font-semibold truncate ${isDark ? 'text-white/90' : 'text-gray-900'}`}>
             {job.title}
           </div>
           <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-xs text-white/50">{job.company}</span>
+            <span className={`text-xs ${isDark ? 'text-white/50' : 'text-gray-500'}`}>{job.company}</span>
             {job.location && (
-              <span className="text-xs text-white/25">· {job.location}</span>
+              <span className={`text-xs ${isDark ? 'text-white/25' : 'text-gray-400'}`}>· {job.location}</span>
             )}
           </div>
         </div>
@@ -98,11 +115,8 @@ export default function JobCard({ job, now, isNew, isBrandNew }: JobCardProps) {
           </span>
         )}
         <div className="flex items-center gap-1.5">
-          <span
-            className="w-1.5 h-1.5 rounded-full"
-            style={{ background: color }}
-          />
-          <span className="text-[11px] text-white/20">{postedTime}</span>
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
+          <span className={`text-[11px] ${isDark ? 'text-white/20' : 'text-gray-400'}`}>{postedTime}</span>
         </div>
       </div>
     </a>

@@ -4,6 +4,7 @@ export interface Job {
   source: 'greenhouse' | 'lever' | 'ashby' | 'arbeitnow',
   title: string,
   company: string,
+  company_domain: string,
   location: string | null,
   is_remote: boolean,
   description: string | null,

@@ -1,17 +1,18 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { useTheme } from 'next-themes'
 import JobCard from './JobCard'
 import { Job } from '../types/job'
-import { supabase } from '../lib/supabase-browser'
 import NewJobsBadge from './NewJobBadge'
 import { RealtimePostgresInsertPayload } from '@supabase/supabase-js'
+import { supabase } from '../lib/supabase-browser'
 
 const PAGE_SIZE = 20
 const NEW_THRESHOLD = 30 * 60 * 1000
 
 interface JobListProps {
-  onStatsUpdate: (total: number, remote: number, newCount: number) => void
+  onStatsUpdate: (today: number, week: number, month: number) => void
 }
 
 export default function JobList({ onStatsUpdate }: JobListProps) {
@@ -22,27 +23,36 @@ export default function JobList({ onStatsUpdate }: JobListProps) {
   const [hasMore, setHasMore] = useState(true)
   const [pendingJobs, setPendingJobs] = useState<Job[]>([])
   const [now, setNow] = useState(Date.now())
+  const [mounted, setMounted] = useState(false)
+
+  const { theme } = useTheme()
+  const isDark = mounted && theme === 'dark'
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const fetchCursor = useRef<string>('')
-  const totalCountRef = useRef(0)
-  const remoteCountRef = useRef(0)
+  const todayCountRef = useRef(0)
+  const weekCountRef = useRef(0)
+  const monthCountRef = useRef(0)
+
+  useEffect(() => { setMounted(true) }, [])
+
+  // 1분마다 now 업데이트
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 60000)
+    return () => clearInterval(interval)
+  }, [])
 
   // 초기 로드
   const fetchJobs = useCallback(async () => {
-    const [{ count: totalCount }, { count: remoteCount }, { data }] = await Promise.all([
-      // 전체 수
-      supabase
-        .from('jobs')
-        .select('*', { count: 'exact', head: true }),  // head: true = 데이터 안 가져오고 count만
+    const now = new Date()
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
 
-      // 리모트 수
-      supabase
-        .from('jobs')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_remote', true),
-
-      // 실제 데이터 20개
+    const [{ count: todayCount }, { count: weekCount }, { count: monthCount }, { data }] = await Promise.all([
+      supabase.from('jobs').select('*', { count: 'exact', head: true }).gte('posted_at', todayStart),
+      supabase.from('jobs').select('*', { count: 'exact', head: true }).gte('posted_at', weekAgo),
+      supabase.from('jobs').select('*', { count: 'exact', head: true }).gte('posted_at', monthAgo),
       supabase.from('jobs').select('*').order('posted_at', { ascending: false }).limit(PAGE_SIZE),
     ])
 
@@ -54,11 +64,12 @@ export default function JobList({ onStatsUpdate }: JobListProps) {
     }
     setJobs(jobs)
     setHasMore(jobs.length === PAGE_SIZE)
-    totalCountRef.current = totalCount ?? 0
-    remoteCountRef.current = remoteCount ?? 0
-    onStatsUpdate(totalCountRef.current, remoteCountRef.current, 0)
+    todayCountRef.current = todayCount ?? 0
+    weekCountRef.current = weekCount ?? 0
+    monthCountRef.current = monthCount ?? 0
+    onStatsUpdate(todayCountRef.current, weekCountRef.current, monthCountRef.current)
     setLoading(false)
-  }, [])
+  }, [onStatsUpdate])
 
   // 추가 로드
   const fetchMore = useCallback(async () => {
@@ -69,7 +80,7 @@ export default function JobList({ onStatsUpdate }: JobListProps) {
       .from('jobs')
       .select('*')
       .order('posted_at', { ascending: false })
-      .lt('posted_at', fetchCursor.current) // 첫 row 이전 데이터만
+      .lt('posted_at', fetchCursor.current)
       .limit(PAGE_SIZE)
 
     if (!data || data.length === 0) {
@@ -79,7 +90,7 @@ export default function JobList({ onStatsUpdate }: JobListProps) {
     }
 
     if (data.length > 0) {
-      fetchCursor.current = data[data.length - 1].posted_at ?? ''  // ← 커서 업데이트
+      fetchCursor.current = data[data.length - 1].posted_at ?? ''
     }
 
     setJobs(prev => [...prev, ...data as Job[]])
@@ -90,30 +101,26 @@ export default function JobList({ onStatsUpdate }: JobListProps) {
   // 대기 중인 포지션 반영 (뱃지 클릭)
   const flushPending = useCallback(() => {
     if (pendingJobs.length === 0) return
-
     const ids = new Set(pendingJobs.map(j => j.id))
     setJobs(prev => {
       const merged = [...pendingJobs, ...prev]
-      return merged.sort((a,b) =>
+      return merged.sort((a, b) =>
         new Date(b.posted_at ?? 0).getTime() - new Date(a.posted_at ?? 0).getTime()
       )
     })
     setBrandNewIds(ids)
     setPendingJobs([])
-
-    window.scrollTo({ top: 0, behavior: 'smooth' })  // ← 이렇게
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    setTimeout(() => setBrandNewIds(new Set()), 10000)
   }, [pendingJobs])
 
-  // Intersection Observer — 스크롤 맨 아래 감지
+  // Intersection Observer
   useEffect(() => {
-    if (loading) return  // ← loading 끝날 때까지 기다림
+    if (loading) return
     const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) fetchMore()
-      },
+      (entries) => { if (entries[0].isIntersecting) fetchMore() },
       { threshold: 0.1 }
     )
-
     if (bottomRef.current) observer.observe(bottomRef.current)
     return () => observer.disconnect()
   }, [fetchMore, loading])
@@ -130,22 +137,24 @@ export default function JobList({ onStatsUpdate }: JobListProps) {
         (payload: RealtimePostgresInsertPayload<Job>) => {
           const newJob = payload.new as Job
           setPendingJobs(prev => [newJob, ...prev])
-          
-          totalCountRef.current += 1
-          if (newJob.is_remote) remoteCountRef.current += 1
 
-          onStatsUpdate(totalCountRef.current, remoteCountRef.current, 0)
+          const posted = new Date(newJob.posted_at ?? Date.now())
+          const now = new Date()
+          const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+          const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+          const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+
+          if (posted >= todayStart) todayCountRef.current += 1
+          if (posted >= weekAgo) weekCountRef.current += 1
+          if (posted >= monthAgo) monthCountRef.current += 1
+
+          onStatsUpdate(todayCountRef.current, weekCountRef.current, monthCountRef.current)
         }
       )
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [fetchJobs])
-
-  useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 60000) // 1분마다
-    return () => clearInterval(interval)
-  }, [])
+  }, [fetchJobs, onStatsUpdate])
 
   if (loading) {
     return (
@@ -153,7 +162,7 @@ export default function JobList({ onStatsUpdate }: JobListProps) {
         {[...Array(6)].map((_, i) => (
           <div
             key={i}
-            className="h-20 rounded-xl bg-white/[0.03] animate-pulse"
+            className={`h-20 rounded-xl animate-pulse ${isDark ? 'bg-white/[0.03]' : 'bg-black/[0.03]'}`}
             style={{ animationDelay: `${i * 100}ms` }}
           />
         ))}
@@ -163,7 +172,7 @@ export default function JobList({ onStatsUpdate }: JobListProps) {
 
   if (jobs.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-white/20">
+      <div className={`flex flex-col items-center justify-center py-24 ${isDark ? 'text-white/20' : 'text-black/20'}`}>
         <span className="text-4xl mb-4">📭</span>
         <p className="text-sm">No jobs yet. Run /api/fetch-jobs to populate.</p>
       </div>
@@ -172,12 +181,12 @@ export default function JobList({ onStatsUpdate }: JobListProps) {
 
   return (
     <div className="mt-6">
-      <p className="text-[11px] font-semibold tracking-widest uppercase text-white/20 mb-3">
+      <p className={`text-[11px] font-semibold tracking-widest uppercase mb-3 ${isDark ? 'text-white/20' : 'text-black/30'}`}>
         Latest positions
       </p>
 
       {pendingJobs.length > 0 && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50">
+        <div className="fixed top-26 left-1/2 -translate-x-1/2 z-50">
           <NewJobsBadge count={pendingJobs.length} onClick={flushPending} />
         </div>
       )}
@@ -188,27 +197,27 @@ export default function JobList({ onStatsUpdate }: JobListProps) {
             key={job.id}
             job={job}
             now={now}
+            isDark={isDark}
             isNew={!!job.posted_at && now - new Date(job.posted_at).getTime() < NEW_THRESHOLD}
             isBrandNew={brandNewIds.has(job.id)}
           />
         ))}
       </div>
 
-      {/* Intersection Observer 타겟 */}
       <div ref={bottomRef} className="py-4 flex justify-center">
         {loadingMore && (
           <div className="flex gap-1">
             {[...Array(3)].map((_, i) => (
               <div
                 key={i}
-                className="w-1.5 h-1.5 rounded-full bg-white/20 animate-bounce"
+                className={`w-1.5 h-1.5 rounded-full animate-bounce ${isDark ? 'bg-white/20' : 'bg-black/20'}`}
                 style={{ animationDelay: `${i * 150}ms` }}
               />
             ))}
           </div>
         )}
         {!hasMore && jobs.length > 0 && (
-          <p className="text-[11px] text-white/20">모든 포지션을 불러왔어요</p>
+          <p className={`text-[11px] ${isDark ? 'text-white/20' : 'text-black/30'}`}>모든 포지션을 불러왔어요</p>
         )}
       </div>
     </div>
