@@ -1,11 +1,11 @@
 'use client'
 
-import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { useTheme } from 'next-themes'
 import type { User } from '@supabase/supabase-js'
-import LiveBadge from './LiveBadge'
 import { supabase } from '../lib/supabase-browser'
+import LiveBadge from './LiveBadge'
+
 
 interface NavbarProps {
   todayCount?: number
@@ -22,7 +22,7 @@ export default function Navbar({ todayCount = 0, weekCount = 0, monthCount = 0 }
   useEffect(() => {
     setMounted(true)
 
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
+    supabase.auth.getUser().then(async ({ data: { user } }: { data: { user: User | null } }) => {
       setUser(user)
       if (user) {
         const { data } = await supabase
@@ -34,7 +34,7 @@ export default function Navbar({ todayCount = 0, weekCount = 0, monthCount = 0 }
       }
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event: string, session: { user: User | null }) => {
       const u = session?.user ?? null
       setUser(u)
       if (u) {
@@ -81,7 +81,7 @@ export default function Navbar({ todayCount = 0, weekCount = 0, monthCount = 0 }
       {/* Left: 로고 + LiveBadge */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2.5">
-          <Image src="/logo.svg" width={32} height={32} alt="TechHire" />
+          <img src="/logo.svg" width={32} height={32} alt="TechHire" />
           <span className="text-2xl font-extrabold tracking-tight" style={{ fontFamily: 'var(--font-fraunces), serif' }}>
             <span className="text-indigo-400">Tech</span>
             <span className={isDark ? 'text-white' : 'text-gray-900'}>Hire</span>
